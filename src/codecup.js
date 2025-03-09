@@ -10,6 +10,17 @@
   * @typedef {object} EditorJsCodeCupConfig
   * @property {string} placeholder - placeholder for the empty EditorJsCodeCup
   * @property {boolean} preserveBlank - Whether or not to keep blank EditorJsCodeCups when saving editor data
+  * @property {Object.<string, string>} languages - 
+  * Custom mapping of Prism.js language keys to their display names. 
+  * Users can override the default language selection by providing a custom mapping.
+  *
+  * Example:
+  * languages: { 
+  *   csharp: "C#",
+  *   javascript: "JavaScript",
+  *   python: "Python",
+  *   java: "Java",
+  * }
   */
  
  /**
@@ -39,6 +50,32 @@
 
    static get enableLineBreaks() {
     return true;
+  }
+   /**
+   * Returns the default set of supported languages.
+   * @return {Object} Default language map (PrismJS key -> Label)
+   */
+   static getDefaultLanguages() {
+    return {
+      bash: "Bash",
+      c: "C",
+      cpp: "C++",
+      csharp: "C#",
+      css: "CSS",
+      go: "Go",
+      html: "HTML",
+      java: "Java",
+      javascript: "JavaScript",
+      json: "JSON",
+      kotlin: "Kotlin",
+      php: "PHP",
+      python: "Python",
+      ruby: "Ruby",
+      rust: "Rust",
+      sql: "SQL",
+      swift: "Swift",
+      typescript: "TypeScript",
+    };
   }
  
    /**
@@ -74,6 +111,12 @@
 
      this._preserveBlank = config.preserveBlank !== undefined ? config.preserveBlank : false;
 
+     // Use custom languages from config if provided; otherwise, use defaults.
+     this._languages =
+      config.languages && Object.keys(config.languages).length > 0
+      ? config.languages
+      : EditorJsCodeCup.getDefaultLanguages();
+
      this._element; // used to hold the wrapper div, as a point of reference
 
  
@@ -101,7 +144,7 @@
        return;
      }
 
-     console.log(e)
+    //  console.log(e)
  
      const {textContent} = this._element;
  
@@ -122,10 +165,10 @@
     this._element.classList.add('editorjs-codeCup_Wrapper')
     let editorElem = document.createElement('div');
     editorElem.classList.add('editorjs-codeCup_Editor')
+
     let langdisplay = document.createElement('div');
     langdisplay.classList.add('editorjs-codeCup_LangDisplay')
-
-    langdisplay.innerHTML = this.data.language
+    langdisplay.innerHTML = this.data.language === "plain"  ? "Plain Text" : this._languages[this.data.language] || this.data.language;
 
     this._element.appendChild(editorElem)
     this._element.appendChild(langdisplay)
@@ -139,7 +182,6 @@
       copyButton : this.data.showCopyButton,
     });
 
-    // console.log(this.data.editorInstance)
     
 
     this.data.editorInstance.onUpdate((code) => {
@@ -177,42 +219,68 @@
     };
   }
 
+  _renderLanguageDropdown(languageSelectContainer) {
+    const dropdown = document.createElement("div");
+    dropdown.classList.add("editorjs-codeCup_languageDropdown");
+  
+    // Sort languages alphabetically by their display names, ensuring case-insensitive ordering
+     const sortedLanguages = Object.entries(this._languages).sort((a, b) =>
+      a[1].localeCompare(b[1], undefined, { sensitivity: "base" })
+    );
+  
+    // Generate language options
+    const fragment = document.createDocumentFragment(); // Using DocumentFragment to minimize DOM reflows
+    sortedLanguages.forEach(([key, label]) => {
+      const langOption = document.createElement("div");
+      langOption.classList.add("editorjs-codeCup_languageOption");
+      langOption.innerText = label;
+  
+      // Handle selection
+      langOption.addEventListener("click", () => {
+        this._updateLanguage(key, label);
+        dropdown.style.display = "none";
+      });
+  
+      fragment.appendChild(langOption); 
+    });
+    dropdown.appendChild(fragment); // Append all language options to DOM in a single operation to improve performance
+  
+    languageSelectContainer.appendChild(dropdown)
+  }
+  
+  _renderLanguageSelectContainer() {
+    const languageSelectContainer = document.createElement('div');
+    languageSelectContainer.classList.add('ce-popover-item'); 
+    languageSelectContainer.classList.add('editorjs-codeCup_languageSelectContainer'); 
+    languageSelectContainer.innerHTML = `
+      <div class="ce-popover-item__icon ce-popover-item__icon--tool">
+        <svg width="64px" height="64px" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" fill="#000000">
+          <polyline points="160 368 32 256 160 144" style="fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:32px"></polyline>
+          <polyline points="352 368 480 256 352 144" style="fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:32px"></polyline>
+          <line x1="304" y1="96" x2="208" y2="416" style="fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:32px"></line>
+        </svg>
+      </div>
+      <div class="ce-popover-item__title">Select Language</div>
+    `;
+  
+    languageSelectContainer.addEventListener('click', (event) => {
+      event.stopPropagation();
+  
+      // Toggle dropdown: remove if already open, otherwise show it
+      const existingDropdown = document.querySelector(".editorjs-codeCup_languageDropdown");
+      if (existingDropdown) {
+        existingDropdown.remove();
+      } else {
+        this._renderLanguageDropdown(languageSelectContainer);
+      }
+    });
+  
+    return languageSelectContainer
+  }
+
    renderSettings() {
     const settingsContainer = document.createElement('div');
-
-
-
-
-    // let languagesSelect = document.createElement("select");
-    // languagesSelect.classList.add("small");
-    // languagesSelect.classList.add("wide");
-
-    // //sort available languages alphabetically (ignore case)
-    // let languages = Object.keys(Prism.languages).sort(function (a, b) {
-    //     return a.toLowerCase().localeCompare(b.toLowerCase());
-    // });
-
-    // //Create and append the options
-    // for (var i = 0; i < languages.length; i++) {
-    //     // Weirdly PrismJS doesnt expose a list of installed languages, or rather it does, but it is mixed with helper functions, which i have to clear here.
-    //     if (languages[i] == "extend" || languages[i] == "insertBefore" || languages[i] == "DFS") {
-    //       continue;
-    //     }
-
-    //     var option = document.createElement("option");
-    //     option.value = languages[i];
-    //     option.text = languages[i];
-    //     if(languages[i] == this.data.language){
-    //       option.selected="selected"
-    //     }
-    //     languagesSelect.appendChild(option);
-    // }
-
-    // languagesSelect.addEventListener('change', (event) => {
-    //   this._updateLanguage(event.target.value)
-    // });
-
-
+     /** Toggle Line Numbers Button */
     // Disabled until codeCup supports toggle of line numbers
     const toggleButton = document.createElement('div');
     const toggleButtonInner = document.createElement('div');
@@ -245,29 +313,7 @@
       }
     });
 
-
-
-    // settingsContainer.appendChild(languagesSelect);
-    // new NiceSelect(languagesSelect, {searchable : true, placeholder : "Language..."});
-
-
-    
-    // create a button, when you click the button there should be a js prompt to enter a language. the default should be the current language.
-    // let languageSelectButton = document.createElement("button");
-    // languageSelectButton.classList.add(this.api.styles.button);
-    // languageSelectButton.style.width = "100%";
-    // languageSelectButton.textContent = this.data.language;
-    // languageSelectButton.addEventListener('click', (event) => {
-
-    //   let lang = prompt("Please enter a language", this.data.language);
-    //   if (lang != null) {
-    //     this._updateLanguage(lang)
-    //     // also update the button text
-    //     event.target.textContent = lang;
-    //   }
-    // });
-
-
+     /** Language Entry Input */
     const languageEntryInputContainer = document.createElement('div');
     languageEntryInputContainer.classList.add('editorjs-codeCup_inputContainer');
 
@@ -276,9 +322,6 @@
     languageEntryInput.classList.add("editorjs-codeCup_input")
     languageEntryInput.setAttribute("contenteditable", "true")
     languageEntryInput.setAttribute("data-placeholder", "Enter a language...")
-
-
-
 
     let languageEntryInputButton = document.createElement("div")
     let string2 = `<div class="ce-popover-item__icon ce-popover-item__icon--tool">
@@ -293,7 +336,7 @@
       }
     });
 
-    
+
     languageEntryInputContainer.appendChild(languageEntryInput)
     languageEntryInputContainer.appendChild(languageEntryInputButton)
     // languageEntryInput.addEventListener('input', (event) => {
@@ -303,7 +346,7 @@
     // });
 
     settingsContainer.appendChild(toggleButton);
-    // settingsContainer.appendChild(languageSelectButton);
+    settingsContainer.appendChild(this._renderLanguageSelectContainer());  // Language Selection
     settingsContainer.appendChild(languageEntryInputContainer);
 
     return settingsContainer;
@@ -320,10 +363,16 @@
 
   }
 
-  _updateLanguage = (lang) => {
-    this.data.language = lang
-    this._element.querySelector('.editorjs-codeCup_LangDisplay').innerHTML = this.data.language
-    this.data.editorInstance.updateLanguage(this.data.language)
+  /**
+   * Updates the selected language for syntax highlighting in the editor.
+   * @param {string} prismLang - The Prism.js language key (e.g., "javascript", "csharp").
+   * @param {string} label - The display name (e.g., "JavaScript", "C#").
+   * If `label` is not provided, the `prismLang` value will be used as the display name.
+   */  
+  _updateLanguage(prismLang, label) {
+    this.data.language = prismLang;
+    this.data.editorInstance.updateLanguage(prismLang);
+    this._element.querySelector(".editorjs-codeCup_LangDisplay").innerHTML = label || prismLang;
   }
  
 
