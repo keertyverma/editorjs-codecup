@@ -34,7 +34,7 @@
     * @constructor
     */
    static get DEFAULT_PLACEHOLDER() {
-     return '// Hello';
+     return 'Enter code here...';
    }
 
    static get enableLineBreaks() {
