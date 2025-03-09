@@ -34,6 +34,7 @@
 
 
   import codecup from '@calumk/codecup/dist/codecup.bundle.js';
+  import components from "prismjs/components.json";
 
 
  
@@ -68,6 +69,7 @@
       javascript: "JavaScript",
       json: "JSON",
       kotlin: "Kotlin",
+      none: "Plain Text",
       php: "PHP",
       python: "Python",
       ruby: "Ruby",
@@ -124,7 +126,7 @@
      // let x = (x === undefined) ? your_default_value : x;
      this.data = {}
      this.data.code = (data.code === undefined) ? '// Hello World' : data.code;
-     this.data.language = (data.language === undefined) ? 'plain' : data.language;
+     this.data.language = (data.language === undefined) ? 'plain' : data.language.toLowerCase();
      this.data.showlinenumbers = (data.showlinenumbers === undefined) ? true : data.showlinenumbers;
      this.data.showCopyButton = (data.showCopyButton === undefined) ? true : data.showCopyButton;
      this.data.editorInstance = {}
@@ -236,9 +238,10 @@
       langOption.innerText = label;
   
       // Handle selection
-      langOption.addEventListener("click", () => {
-        this._updateLanguage(key, label);
-        dropdown.style.display = "none";
+      langOption.addEventListener("click", (event) => {
+        event.stopPropagation()
+        const isUpdated = this._updateLanguage(key, label);
+        if(isUpdated) dropdown.style.display = "none"; // close the dropdown
       });
   
       fragment.appendChild(langOption); 
@@ -332,7 +335,8 @@
     languageEntryInputButton.addEventListener('click', (event) => {
       let lang = languageEntryInput.textContent
       if(lang != ''){
-        this._updateLanguage(lang)
+        const isUpdated = this._updateLanguage(lang)
+        if(isUpdated) languageEntryInput.textContent = '' // clear the input field
       }
     });
 
@@ -365,17 +369,87 @@
 
   /**
    * Updates the selected language for syntax highlighting in the editor.
-   * @param {string} prismLang - The Prism.js language key (e.g., "javascript", "csharp").
-   * @param {string} label - The display name (e.g., "JavaScript", "C#").
-   * If `label` is not provided, the `prismLang` value will be used as the display name.
-   */  
-  _updateLanguage(prismLang, label) {
-    this.data.language = prismLang;
-    this.data.editorInstance.updateLanguage(prismLang);
-    this._element.querySelector(".editorjs-codeCup_LangDisplay").innerHTML = label || prismLang;
-  }
- 
+   * - If the provided language is valid Prismjs language key, updates the editor's language setting and UI.
+   * - If the language is invalid, displays an error message and does not update the language.
+   * @param {string} language - The Prism.js language key (e.g., "javascript", "csharp").
+   * @param {string} label - The display name for the language (e.g., "JavaScript", "C#").
+   *                         If not provided, `language` is used as the display name.
+   * @returns {boolean} - Returns `true` if the language was successfully updated, otherwise `false`.
+   */
+  _updateLanguage(language, label) {
+    if(!this._isValidLanguage(language)) {
+      this._handleErrorMessage(language); // Show an error message for the invalid language
+      return false;
+    }
 
+    // Normalize language identifier to lowercase to prevent PrismJS from misidentifying or failing to autoload syntax highlighting.
+    const normalizedLang = language.toLowerCase()
+    
+    // Use "plain" internally for consistency since PrismJS uses "none". 
+    // This ensures users can reset to plain text properly.
+    this.data.language = normalizedLang === 'none' ? 'plain' : normalizedLang;
+    this.data.editorInstance.updateLanguage(normalizedLang);
+
+    this._element.querySelector('.editorjs-codeCup_LangDisplay').innerHTML = label || this._languages[normalizedLang] || this.data.language
+    this._handleErrorMessage(null); // Remove error message if previously shown
+    return true;
+  }
+
+  /**
+   * Checks if the given language is a valid Prism.js language or an alias.
+   * @param {string} language - The language key to validate.
+   * @returns {boolean} - Returns `true` if the language or its alias is supported by Prism.js, otherwise `false`.
+  */
+  _isValidLanguage = (language) => {
+    if (!language) return false;
+    const normalizedLang = language.toLowerCase()
+    if(normalizedLang === 'none') return true; // Allow "none" as a valid option for plaintext
+    
+    // Check if the language matches a primary Prism.js language
+    const SUPPORTED_LANGUAGES = Object.keys(components.languages);
+    const languageSet = new Set(SUPPORTED_LANGUAGES);
+    if(languageSet.has(normalizedLang.toLowerCase())) {
+      return true;
+    }
+  
+    // Check if the language matches any aliases
+    return SUPPORTED_LANGUAGES.some((language) => {
+      const langConfig = components.languages[language];
+      if (langConfig && langConfig.alias) {
+        const aliases = Array.isArray(langConfig.alias) ? langConfig.alias : [langConfig.alias];
+        return aliases.includes(normalizedLang.toLowerCase());
+      }
+      return false;
+    });
+  };
+
+   /**
+   * Manages the display of an error message for invalid syntax highlighting languages.
+   * - If an invalid language is provided, an error message is shown.
+   *   Users can manually dismiss the error message using a close button.
+   * - If a valid language is entered, any existing error message is removed.
+   * @param {string|null} language - The invalid language key. If `null`, the error message is removed.
+   */
+   _handleErrorMessage = (language) => {
+    if (!this._element) return;
+
+    let errorMessage = this._element.parentNode.querySelector('.editorjs-codeCup_languageErrorMessage')
+    if(language) {
+      // Display an error message
+      if(!errorMessage) {
+        errorMessage = document.createElement('div')
+        errorMessage.classList.add('editorjs-codeCup_languageErrorMessage');
+        this._element.before(errorMessage) // Insert the error message before the editor element
+      }
+      errorMessage.innerHTML = `⚠ Syntax highlighting is unavailable. "${language}" is not a valid Prism.js language key. <button class="close-error">&times;</button>`;
+      
+      errorMessage.querySelector('.close-error').addEventListener('click', () => {
+        errorMessage.remove();
+      });
+    } else if (errorMessage) {
+      errorMessage.remove(); // Remove any existing error message
+    }
+  }
  
    /**
     * Extract Tool's data from the view
